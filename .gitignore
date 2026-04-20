@@ -1,5 +1,4 @@
-# Data processed (KHÔNG commit)
-data/processed/*
+.venv/
 
 # Big Data 
 data/raw/images/*
