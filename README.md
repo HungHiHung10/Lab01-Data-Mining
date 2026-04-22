@@ -147,30 +147,66 @@ data/raw/
 Các notebook trong cùng giai đoạn có thể chạy độc lập. EDA nên chạy trước Preprocessing tương ứng vì kết quả EDA định hướng các quyết định tiền xử lý.
 
 ---
+## Tóm tắt kết quả
 
-## Tóm tắt Kết quả
+### Dữ liệu Ảnh
+---
+**EDA — Phát hiện chính**
 
-### Dữ liệu Hình ảnh
+Dữ liệu cân bằng tốt với Imbalance Ratio tối đa chỉ 1.15, không cần resampling. Quá trình kiểm tra chất lượng phát hiện 0.43% ảnh trùng lặp tuyệt đối qua perceptual hashing (pHash), được loại bỏ để tránh data leakage. Phân tích đặc trưng thị giác cho thấy hai điểm đáng chú ý: phân phối độ sáng lệch trái và không đồng đều giữa các lớp (glacier sáng nhất, forest tối nhất), đồng thời nhóm Đô thị (street, buildings) có tương phản sắc nét hơn hẳn nhóm Thiên nhiên (glacier, sea) — gợi ý rằng đặc trưng cạnh (edge) và kết cấu (texture) sẽ là chìa khoá phân biệt chính.
 
-**EDA:** Dữ liệu cân bằng tốt (IR max = 1.15). Phát hiện 0.43% ảnh trùng lặp qua pHash, loại bỏ để tránh data leakage. Phân phối độ sáng lệch trái và không đồng đều giữa các lớp (glacier sáng nhất, forest tối nhất). Nhóm Đô thị có tương phản sắc nét hơn nhóm Thiên nhiên — gợi ý edge/texture là đặc trưng phân biệt chính.
+**Preprocessing**
 
-**Preprocessing:** Pipeline ablation-driven so sánh nhiều phương án cho từng bước: Resize (32×32 vs 64×64 vs 128×128 → chọn 32×32), Không gian màu (RGB vs Grayscale vs HSV vs LAB → chọn HSV), Chuẩn hoá (MinMax vs Z-score toàn tập vs Z-score per-channel → chọn Z-score per-channel), Augmentation (KS test xác nhận dịch chuyển phân phối có kiểm soát), Giảm chiều (PCA xác nhận dữ liệu dư thừa cao, t-SNE cho thấy glacier–mountain–sea chồng lấp), Đặc trưng cạnh (Sobel, Prewitt, Canny — ANOVA có ý nghĩa nhưng đơn lẻ chưa đủ). Cấu hình chốt: Resize 32×32 | HSV | Z-score per-channel | Augmentation.
+Pipeline được thiết kế theo hướng thực nghiệm có kiểm soát, mỗi bước đều so sánh nhiều phương án và chọn dựa trên bằng chứng định lượng:
+
+- **Resize:** So sánh 32×32, 64×64, 128×128 → chọn 32×32 (cân bằng tốt giữa tốc độ tính toán và mức giữ thông tin).
+- **Không gian màu:** So sánh RGB, Grayscale, HSV, LAB → chọn HSV (kênh Hue/Saturation tách tốt các lớp có đặc trưng màu mạnh như forest).
+- **Chuẩn hoá:** So sánh Min-Max [0,1], Min-Max [-1,1], Z-score toàn tập, Z-score per-channel → chọn Z-score per-channel (ổn định nhất, giảm lệch thang đo giữa các kênh màu).
+- **Augmentation:** Dịch chuyển phân phối có kiểm soát — KS test cho thấy phân phối pixel thay đổi có ý nghĩa nhưng cấu trúc cụm lớp vẫn được duy trì.
+- **Giảm chiều:** PCA xác nhận dữ liệu dư thừa cao, nén mạnh được. t-SNE cho thấy ranh giới phi tuyến giữa các lớp, đặc biệt glacier–mountain–sea chồng lấp đáng kể.
+- **Đặc trưng cạnh:** Sobel, Prewitt, Canny — edge density có ý nghĩa thống kê giữa các lớp (ANOVA p-value rất nhỏ), tuy nhiên đơn lẻ chưa đủ phân loại hoàn chỉnh.
+
+**Cấu hình chốt:** Resize 32×32 | HSV | Z-score per-channel | Augmentation.
+
+**Hạn chế và hướng phát triển:** Pipeline hiện thiên về mô hình cổ điển (LR, k-NN) với đặc trưng bậc thấp (pixel, màu, cạnh), augmentation chưa tối ưu theo từng lớp. Hướng tiếp theo là tích hợp dữ liệu đã tiền xử lý vào các kiến trúc Deep Learning (CNN/ViT) kết hợp cross-validation để bứt phá giới hạn hiệu năng.
 
 ---
-
-### Dữ liệu Bảng
-
-**EDA:** Kiểm định D'Agostino-Pearson bác bỏ phân phối chuẩn cho 6/6 biến số (p ≈ 0), skewness từ -1.84 đến 24.34. Đa cộng tuyến nghiêm trọng giữa original\_price và discounted\_price (r = 0.97–0.99). Chênh lệch Pearson vs Spearman chứng minh dữ liệu chứa outlier và quan hệ phi tuyến. Little's MCAR test bác bỏ MCAR (chi² = 6,519) — dữ liệu thiếu theo MAR kết hợp MNAR.
-
-**Preprocessing:** Xử lý giá trị thiếu — mô phỏng 10% MCAR, so sánh 5 chiến lược bằng RMSE; Hybrid Imputation: k-NN cho biến hành vi, MICE cho biến giá (cải thiện 10.5–58.1% so với đơn biến). Phát hiện ngoại lai — 5 phương pháp (IQR, Z-Score, IF, LOF, DBSCAN), đối chiếu Jaccard + KS Test; chiến lược kép: majority voting + Winsorization P1-P99 (loại 1,115 dòng, skewness 12.32 → 6.04). Chuẩn hoá — so sánh 4 scaler qua Levene + Violin Plot; RobustScaler phù hợp nhất cho biến lệch mạnh. Mã hoá — so sánh 4 phương pháp qua VIF; Frequency Encoding tối ưu (Mean VIF 4.977). Lựa chọn đặc trưng — 3 tầng (Filter, Model-based, PCA/t-SNE); mọi phương pháp hội tụ R² ≈ 0.23 với LR, RF đạt R² ≈ 0.96 trên cùng features. Mất cân bằng lớp — imbalance 1:8; No Resampling + RF đạt F1-macro cao nhất (0.9059); AUC-ROC ≈ 0.98–0.99 cho mọi chiến lược.
-
+### Dữ liệu Bảng 
 ---
 
-### Dữ liệu Văn bản
+**EDA — Phát hiện chính**
 
-**EDA:** Dữ liệu cân bằng hoàn hảo (25K mỗi lớp). Độ dài văn bản không phân biệt cảm xúc (Mann-Whitney U: Word Count p=0.029 không thực tiễn, Char Count p=0.173 không ý nghĩa). Nghịch lý từ phủ định ở cả hai lớp chứng minh cần N-grams. Zipf (R²=0.98) phát hiện 62% Hapax Legomena. 4 vấn đề cốt lõi: nhiễu HTML/URL, phân mảnh từ vựng, domain stopwords, curse of dimensionality (214K từ).
+Kiểm định D'Agostino-Pearson bác bỏ phân phối chuẩn cho 6/6 biến số (p ≈ 0), mức độ lệch từ -1.84 (product\_rating) đến 24.34 (total\_reviews). Heatmap Pearson và Spearman phát hiện đa cộng tuyến nghiêm trọng giữa original\_price và discounted\_price (r = 0.97–0.99), đồng thời chênh lệch lớn giữa hai hệ số ở nhiều cặp biến (discounted\_price — purchased\_last\_month: Pearson = -0.10, Spearman = -0.69) chứng minh dữ liệu chứa outlier và quan hệ phi tuyến. Little's MCAR test bác bỏ cơ chế MCAR (chi² = 6,519, p ≈ 0) — dữ liệu thiếu theo MAR kết hợp MNAR, với sustainability\_tags thiếu 92%, nhóm biến giá thiếu đồng thời 4.8%, nhóm rating/reviews thiếu 2.4%. Đề xuất: RobustScaler cho biến lệch mạnh, loại bỏ original\_price, KNN Imputer cho biến số và hằng số domain cho biến phân loại.
 
-**Preprocessing:** Regex clean → NLTK tokenize → WordNet Lemmatize → TF-IDF (min\_df=3, max\_df=0.95, bi-gram) cắt vocabulary từ ~100K xuống ~40–50K. So sánh Word-level vs BPE; WordNet Lemmatizer an toàn hơn Snowball Stemmer. TF-IDF + LinearSVC đạt Accuracy ~89.5%, vượt SBERT + LinearSVC (~82.3%) do linear bottleneck trên không gian phi tuyến. SBERT cần mô hình phi tuyến để phát huy tiềm năng.
+**Preprocessing — Pipeline thực nghiệm có kiểm soát**
+
+Mỗi bước triển khai nhiều phương án cạnh tranh, đánh giá bằng metric định lượng:
+
+- **Xử lý giá trị thiếu:** Mô phỏng 10% MCAR trên Ground Truth, so sánh 5 chiến lược bằng RMSE. k-NN và MICE áp đảo phương pháp đơn biến (cải thiện 10.5–58.1%). Triển khai Hybrid Imputation: k-NN (k=10) cho biến hành vi, MICE cho biến giá. Biến phân loại: buy\_box\_availability → "Not Available", sustainability\_tags → "No Tag".
+- **Phát hiện ngoại lai:** 5 phương pháp (IQR, Z-Score, Isolation Forest, LOF, DBSCAN), đối chiếu qua Jaccard và KS Test. IQR gộp đánh dấu 41% — quá khắt khe; Z-Score bị masking effect; phương pháp đa biến bảo toàn phân phối tốt hơn. Chiến lược kép: majority voting đa biến + Winsorization P1-P99. Loại 1,115 dòng → 41,560. Skewness target: 12.32 → 6.04.
+- **Chuẩn hoá:** So sánh MinMax, Z-Score, RobustScaler, Quantile qua Levene Test và Violin Plot. RobustScaler phù hợp nhất cho biến lệch mạnh. StandardScaler vẫn khả dụng cho tree-based models.
+- **Mã hoá:** So sánh One-Hot, Target, Binary, Frequency Encoding qua VIF. Frequency Encoding tối ưu: giữ 16 features, Mean VIF thấp nhất (4.977), không tạo đa cộng tuyến mới. Loại original\_price (r = 0.97) và cột định danh.
+- **Lựa chọn đặc trưng:** 3 tầng — Filter (ANOVA, Chi-square, MI), Model-based (RF/GB importance, RFE-CV), Giảm chiều (PCA, t-SNE). Mọi phương pháp hội tụ R² ≈ 0.2348 với Linear Regression. total\_reviews chiếm 84–85% importance trong RF/GB. PCA cần 9/10 PCs cho 90% variance — không giảm chiều được. Vấn đề nằm ở model choice: cùng features, RF đạt R² ≈ 0.96 vs LR ≈ 0.23.
+- **Mất cân bằng lớp:** Target rời rạc hoá thành is\_popular (top 10%), imbalance 1:8. No Resampling + RF đạt F1-macro cao nhất (0.9059). SMOTE cân bằng tốt nhất khi cần Recall cao (P=0.72, R=0.90). AUC-ROC ≈ 0.98–0.99 cho mọi chiến lược — resampling dịch chuyển decision boundary, không cải thiện discriminative power. Resampling trước split gây data leakage.
+
+---
+### Dữ liệu Văn bản 
+---
+
+**EDA — Phát hiện chính**
+
+Dữ liệu cân bằng hoàn hảo (25,000 mẫu mỗi lớp), không cần resampling. Độ dài văn bản lệch phải mạnh (Mean ~230, Median ~173 từ) nhưng không phân biệt được cảm xúc (Mann-Whitney U: Word Count p=0.029 — ý nghĩa thống kê nhưng không thực tiễn, Character Count p=0.173 — không ý nghĩa). Nghịch lý từ phủ định xuất hiện ở cả hai lớp: "good" trong Negative ("not good"), "never" trong Positive ("never seen better") — chứng minh phân tích unigram không đủ, cần N-grams. Phân tích Zipf (R²=0.98) phát hiện 62% từ vựng chỉ xuất hiện 1 lần (Hapax Legomena). Tổng hợp 4 vấn đề cốt lõi: nhiễu HTML/URL, phân mảnh từ vựng (movie/movies), domain stopwords không phân biệt cảm xúc, và curse of dimensionality từ 214K từ vựng.
+
+**Preprocessing — Pipeline NLP**
+
+Pipeline giải quyết tuần tự 4 vấn đề từ EDA:
+
+- **Làm sạch:** Regex loại HTML, URL, ký tự đặc biệt, lowercase. Stopwords mặc định cần tuỳ chỉnh để không xoá nhầm từ phủ định quan trọng.
+- **Tokenization:** So sánh Word-level (NLTK) và Subword (BPE) — Word-level cho BoW/TF-IDF, BPE triệt tiêu OOV cho Transformer.
+- **Lemmatization:** WordNet Lemmatizer được chọn (an toàn ngữ nghĩa hơn Snowball Stemmer), giải quyết phân mảnh từ vựng.
+- **Vector hoá:** TF-IDF (min\_df=3, max\_df=0.95, bi-gram) cắt vocabulary từ ~100K xuống ~40–50K. So sánh với Word2Vec và SBERT.
+
+**Kết quả:** TF-IDF + LinearSVC đạt Accuracy ~89.5%, vượt SBERT + LinearSVC (~82.3%) do SBERT nén ngữ nghĩa vào không gian phi tuyến mà bộ phân loại tuyến tính không bóc tách hiệu quả. Pipeline chốt: Regex clean → NLTK tokenize → WordNet Lemmatize → TF-IDF (bi-gram) + LinearSVC. SBERT cần mô hình phi tuyến để phát huy tiềm năng.
 
 ---
 
