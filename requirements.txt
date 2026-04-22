@@ -1,0 +1,35 @@
+# Core Data Science
+numpy
+pandas
+scipy
+statsmodels
+matplotlib
+seaborn
+missingno
+
+# Image Processing & Computer Vision
+opencv-python
+Pillow
+
+# Machine Learning & Statistics
+scikit-learn
+imbalanced-learn
+torchmetrics
+
+# Natural Language Processing (NLP)
+nltk
+spacy
+gensim
+sentence-transformers
+tokenizers
+wordcloud
+
+# Deep Learning (PyTorch)
+torch
+torchvision
+torchaudio
+
+# Utilities & Progress Bars
+tqdm
+ipython
+ipywidgets
